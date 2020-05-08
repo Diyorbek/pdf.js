@@ -302,11 +302,15 @@ class Page {
         for (const annotation of annotations) {
           if (isAnnotationRenderable(annotation, intent)) {
             opListPromises.push(
-              annotation.getOperatorList(
-                partialEvaluator,
-                task,
-                renderInteractiveForms
-              )
+              annotation
+                .getOperatorList(partialEvaluator, task, renderInteractiveForms)
+                .catch(function (reason) {
+                  warn(
+                    "getOperatorList - ignoring annotation data during " +
+                      `"${task.name}" task: "${reason}".`
+                  );
+                  return null;
+                })
             );
           }
         }
@@ -763,7 +767,15 @@ class PDFDocument {
 
   _getLinearizationPage(pageIndex) {
     const { catalog, linearization } = this;
-    assert(linearization && linearization.pageFirst === pageIndex);
+    if (
+      typeof PDFJSDev === "undefined" ||
+      PDFJSDev.test("!PRODUCTION || TESTING")
+    ) {
+      assert(
+        linearization && linearization.pageFirst === pageIndex,
+        "_getLinearizationPage - invalid pageIndex argument."
+      );
+    }
 
     const ref = Ref.get(linearization.objectNumberFirst, 0);
     return this.xref

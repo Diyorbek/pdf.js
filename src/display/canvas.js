@@ -29,6 +29,37 @@ import {
 } from "../shared/util.js";
 import { getShadingPatternFromIR, TilingPattern } from "./pattern_helper.js";
 
+class DarkMode {
+  static reduceColor(h, s, l) {
+    if (h === 0 && s === 0) {
+      return [0, 0, Math.abs(0.8 - l)];
+    }
+
+    if (s > 0.5) {
+      s *= 0.8;
+    }
+
+    if (l > 0.5 && l < 0.8) {
+      l *= 0.8;
+    } else if (l >= 0.8) {
+      l *= 0.4;
+    } else {
+      l *= 1.6;
+    }
+
+    return [h, s, l];
+  }
+
+  static reduceByteColor(byte) {
+    if (byte > 127 && byte < 204) {
+      return byte * 0.8;
+    } else if (byte >= 204) {
+      return byte * 0.4;
+    }
+    return byte * 1.6;
+  }
+}
+
 // <canvas> contexts store most of the state we need natively.
 // However, PDF needs a bit more state, which we store here.
 
@@ -511,6 +542,8 @@ var CanvasGraphics = (function CanvasGraphicsClosure() {
     // imgData.kind tells us which one this is.
     if (imgData.kind === ImageKind.GRAYSCALE_1BPP) {
       // Grayscale, 1 bit per pixel (i.e. black-and-white).
+      console.log("greyscaled");
+
       var srcLength = src.byteLength;
       var dest32 = new Uint32Array(dest.buffer, 0, dest.byteLength >> 2);
       var dest32DataLength = dest32.length;
@@ -562,7 +595,29 @@ var CanvasGraphics = (function CanvasGraphicsClosure() {
       j = 0;
       elemsInThisChunk = width * FULL_CHUNK_HEIGHT * 4;
       for (i = 0; i < fullChunks; i++) {
-        dest.set(src.subarray(srcPos, srcPos + elemsInThisChunk));
+        const currentChunk = src.subarray(srcPos, srcPos + elemsInThisChunk);
+
+        // const currentDarkChunk = new Uint32Array(elemsInThisChunk);
+        // for (let index = 0; index < elemsInThisChunk; index += 4) {
+        //   const converted = Util.convertRgbToHSL(
+        //     currentChunk[index],
+        //     currentChunk[index + 1],
+        //     currentChunk[index + 2]
+        //   );
+        //   const reducedColors = DarkMode.reduceColor(
+        //     converted[0],
+        //     converted[1],
+        //     converted[2]
+        //   );
+        //   const rgba = Util.convertHslToRGB(
+        //     reducedColors[0],
+        //     reducedColors[1],
+        //     reducedColors[2]
+        //   ).concat(1);
+        //   currentDarkChunk.set(rgba, i);
+        // }
+
+        dest.set(currentChunk);
         srcPos += elemsInThisChunk;
 
         ctx.putImageData(chunkImgData, 0, j);
@@ -575,6 +630,8 @@ var CanvasGraphics = (function CanvasGraphicsClosure() {
       }
     } else if (imgData.kind === ImageKind.RGB_24BPP) {
       // RGB, 24-bits per pixel.
+      console.log("rgbd");
+
       thisChunkHeight = FULL_CHUNK_HEIGHT;
       elemsInThisChunk = width * thisChunkHeight;
       for (i = 0; i < totalChunks; i++) {
@@ -585,6 +642,14 @@ var CanvasGraphics = (function CanvasGraphicsClosure() {
 
         destPos = 0;
         for (j = elemsInThisChunk; j--; ) {
+          // const converted = Util.convertRgbToHSL(
+          //   src[srcPos++],
+          //   src[srcPos++],
+          //   src[srcPos++]
+          // );
+          // const reducedColors = DarkMode.reduceColor(...converted);
+          // const rgbs = Util.convertHslToRGB(...reducedColors);
+          // [dest[destPos++], dest[destPos++], dest[destPos++]] = rgbs;
           dest[destPos++] = src[srcPos++];
           dest[destPos++] = src[srcPos++];
           dest[destPos++] = src[srcPos++];
@@ -811,7 +876,7 @@ var CanvasGraphics = (function CanvasGraphicsClosure() {
       var height = this.ctx.canvas.height;
 
       this.ctx.save();
-      this.ctx.fillStyle = background || "rgb(255, 255, 255)";
+      this.ctx.fillStyle = background || "hsl(0,0%,12%)";
       this.ctx.fillRect(0, 0, width, height);
       this.ctx.restore();
 
@@ -883,6 +948,8 @@ var CanvasGraphics = (function CanvasGraphicsClosure() {
         fnId = fnArray[i];
 
         if (fnId !== OPS.dependency) {
+          // console.log(this[fnId].name);
+
           this[fnId].apply(this, argsArray[i]);
         } else {
           for (const depObjId of argsArray[i]) {
@@ -1313,6 +1380,7 @@ var CanvasGraphics = (function CanvasGraphicsClosure() {
         ctx.fillStyle = fillColor.getPattern(ctx, this);
         needRestore = true;
       }
+      // ctx.fillStyle = "#00a";
 
       if (this.pendingEOFill) {
         ctx.fill("evenodd");
@@ -1369,6 +1437,7 @@ var CanvasGraphics = (function CanvasGraphicsClosure() {
       this.current.textMatrixScale = 1;
       this.current.x = this.current.lineX = 0;
       this.current.y = this.current.lineY = 0;
+      this.ctx.fillStyle = "hsl(0,0%,12%)";
     },
     endText: function CanvasGraphics_endText() {
       var paths = this.pendingTextPaths;
@@ -1577,6 +1646,8 @@ var CanvasGraphics = (function CanvasGraphicsClosure() {
     showText: function CanvasGraphics_showText(glyphs) {
       var current = this.current;
       var font = current.font;
+      // console.log(this.current.strokeColor, this.current.fillColor);
+      // console.log(this.ctx.fillStyle);
       if (font.isType3Font) {
         return this.showType3Text(glyphs);
       }
@@ -1700,6 +1771,7 @@ var CanvasGraphics = (function CanvasGraphicsClosure() {
         if (glyph.isInFont || font.missingFile) {
           if (simpleFillText && !accent) {
             // common case
+            // ctx.fillStyle = "#aaa";
             ctx.fillText(character, scaledX, scaledY);
           } else {
             this.paintChar(character, scaledX, scaledY, patternTransform);
@@ -1852,6 +1924,7 @@ var CanvasGraphics = (function CanvasGraphicsClosure() {
     setFillColorN: function CanvasGraphics_setFillColorN() {
       this.current.fillColor = this.getColorN_Pattern(arguments);
       this.current.patternFill = true;
+      // console.log(this.current.fillColor);
     },
     setStrokeRGBColor: function CanvasGraphics_setStrokeRGBColor(r, g, b) {
       var color = Util.makeCssRgb(r, g, b);
@@ -1860,6 +1933,11 @@ var CanvasGraphics = (function CanvasGraphicsClosure() {
     },
     setFillRGBColor: function CanvasGraphics_setFillRGBColor(r, g, b) {
       var color = Util.makeCssRgb(r, g, b);
+      console.log(`%cactual ${color}`, `color:${color}`);
+      color = Util.makeCssHsl(
+        ...DarkMode.reduceColor(...Util.convertRgbToHSL(r, g, b))
+      );
+      console.log(`%c${color}`, `color:${color}`);
       this.ctx.fillStyle = color;
       this.current.fillColor = color;
       this.current.patternFill = false;
@@ -2349,6 +2427,7 @@ var CanvasGraphics = (function CanvasGraphicsClosure() {
         putBinaryImageData(tmpCtx, imgData);
         imgToPaint = tmpCanvas.canvas;
       }
+      // console.log(imgToPaint, tmpCanvas);
 
       var paintWidth = width,
         paintHeight = height;

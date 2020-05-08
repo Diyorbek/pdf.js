@@ -577,6 +577,7 @@ const IsEvalSupportedCached = {
 };
 
 const rgbBuf = ["rgb(", 0, ",", 0, ",", 0, ")"];
+const hslBuf = ["hsl(", 0, ",", 0, "%,", 0, "%)"];
 
 class Util {
   // makeCssRgb() can be called thousands of times. Using ´rgbBuf` avoids
@@ -586,6 +587,75 @@ class Util {
     rgbBuf[3] = g;
     rgbBuf[5] = b;
     return rgbBuf.join("");
+  }
+
+  static makeCssHsl(h, s, l) {
+    hslBuf[1] = Math.round(h);
+    hslBuf[3] = Math.round(s * 100);
+    hslBuf[5] = Math.round(l * 100);
+    return hslBuf.join("");
+  }
+
+  static convertHslToRGB(h, s, l) {
+    if (s === 0) {
+      const [r, g, b] = [l, l, l].map(x => Math.round(x * 255));
+      return [r, g, b];
+    }
+
+    const c = (1 - Math.abs(2 * l - 1)) * s;
+    const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+    const m = l - c / 2;
+
+    const [r, g, b] = (() => {
+      if (h < 60) {
+        return [c, x, 0];
+      } else if (h < 120) {
+        return [x, c, 0];
+      } else if (h < 180) {
+        return [0, c, x];
+      } else if (h < 240) {
+        return [0, x, c];
+      } else if (h < 300) {
+        return [x, 0, c];
+      }
+      return [c, 0, x];
+    })().map(n => Math.round((n + m) * 255));
+
+    return [r, g, b];
+  }
+
+  // https://en.wikipedia.org/wiki/HSL_and_HSV
+  static convertRgbToHSL(r, g, b) {
+    const red = r / 255;
+    const green = g / 255;
+    const blue = b / 255;
+
+    const max = Math.max(red, green, blue);
+    const min = Math.min(red, green, blue);
+    const delta = max - min;
+
+    const lightness = (max + min) / 2;
+
+    if (delta === 0) {
+      return [0, 0, lightness];
+    }
+
+    let hue;
+    if (max === red) {
+      hue = (((green - blue) / delta) % 6) * 60;
+    } else if (max === green) {
+      hue = ((blue - red) / delta + 2) * 60;
+    } else {
+      hue = ((red - green) / delta + 4) * 60;
+    }
+
+    if (hue < 0) {
+      hue += 360;
+    }
+
+    const saturation = delta / (1 - Math.abs(2 * lightness - 1));
+
+    return [hue, saturation, lightness];
   }
 
   // Concatenates two transformation matrices together and returns the result.
